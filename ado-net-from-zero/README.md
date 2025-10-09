@@ -1,115 +1,315 @@
-Создадим новое приложение  c#
+# Работа с базой данных в C# с использованием Microsoft.Data.SqlClient
 
-# Установка пакетов
+В этой статье мы рассмотрим, как создать приложение на C#, которое взаимодействует с базой данных SQL Server с помощью пакета Microsoft.Data.SqlClient.
 
-Нам понадобится установка пакетов
-Меню `проект/Управление пакетами`
+## Установка необходимых пакетов
 
-Найдите через Обзор пакеты
-* ADO.Net.Client.Core
-* Microsoft.Data.SqlClient
-Нажмите установить, соглашайтесь на все вопросы
+Для начала работы необходимо установить требуемые пакеты NuGet.
 
-![FIG01](images/ado01.PNG)
+### Шаги установки:
 
-![FIG02](images/ado02.PNG)
+1. Откройте меню `Проект → Управление пакетами NuGet`
+2. Перейдите на вкладку "Обзор"
+3. Найдите и установите следующие пакеты:
+   - **ADO.Net.Client.Core**
+   - **Microsoft.Data.SqlClient**
 
-![FIG03](images/ado03.PNG)
+![Установка пакетов](images/ado01.PNG)
+![Поиск пакетов](images/ado02.PNG)
+![Процесс установки](images/ado03.PNG)
 
-На рисунке ниже видно, что В обозревателе решений ,зависимости появились
-2 пакета
+После успешной установки в обозревателе решений в разделе "Зависимости" появятся установленные пакеты:
 
-![FIG04](images/ado04.PNG)
+![Установленные пакеты](images/ado04.PNG)
 
-# Создание подключения и базы
+## Подключение пространств имен
 
-Для работы с пакетами крому установки через Управления пакетами, требуется
-добавить пространсво имен
+Для работы с базой данных добавьте следующие пространства имен в начало файла:
 
-```cs
+```csharp
 using System;
 using Microsoft.Data.SqlClient;
 ```
 
-# Инициализация клиента MS SQL
-Далее объявим константы и переменные
+## Инициализация подключения к SQL Server
 
-```cs
-SqlConnection conn = null;
+Объявим константы и переменные для подключения:
+
+```csharp
 const string ServerName = "(localdb)\\MSSQLLocalDB";
 const string DatabaseName = "Library3";
-
-new SqlConnection();
-
-conn.ConnectionString = $@"Data Source={ServerName};
-    Initial Catalog={DatabaseName};
-    Integrated Security=SSPI;
-    Pooling=false"; // Отключаем пуллинг для создания БД
-
-
 ```
 
-# Создадим БД
-Создадим подключение, обрати внимание что срока подключения другая
+## Создание базы данных
 
-` Initial Catalog=master;` Это нужно для создания БД
+Для создания базы данных необходимо подключиться к серверу с указанием `Initial Catalog=master`:
 
-```cs
-
-  string masterConnectionString = $@"Data Source={ServerName};
+```csharp
+string masterConnectionString = $@"Data Source={ServerName};
          Initial Catalog=master;
          Integrated Security=SSPI;
          Pooling=false";
 
-   using (var masterConn = new SqlConnection(masterConnectionString)) {
-       masterConn.Open();
-       // Создаем базу с правильной кодировкой для кириллицы
-        var cmdCreateDb = new SqlCommand(
-            $"CREATE DATABASE [{DatabaseName}] COLLATE Cyrillic_General_CI_AS",
-            masterConn);
-        cmdCreateDb.ExecuteNonQuery();
-        Console.WriteLine("База данных создана с поддержкой кириллицы.");   
-   }
-
-
-
+using (var masterConn = new SqlConnection(masterConnectionString))
+{
+    masterConn.Open();
+    // Создаем базу с правильной кодировкой для кириллицы
+    var cmdCreateDb = new SqlCommand(
+        $"IF NOT EXISTS(SELECT * FROM sys.databases WHERE name = '{DatabaseName}') " +
+        $"CREATE DATABASE [{DatabaseName}] COLLATE Cyrillic_General_CI_AS",
+        masterConn);
+    cmdCreateDb.ExecuteNonQuery();
+    Console.WriteLine("База данных создана с поддержкой кириллицы.");
+}
 ```
 
+**Важно:** Мы добавили проверку `IF NOT EXISTS` чтобы избежать ошибки при повторном запуске программы.
 
-# Создание таблицы
-```cs
+## Создание таблицы
 
-conn.Open();
-  string createTableQuery = @"
-  IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Authors' AND xtype='U')
-  BEGIN
-      CREATE TABLE Authors (
-          Id INT IDENTITY(1,1) PRIMARY KEY,
-          FirstName NVARCHAR(50) NOT NULL,
-          LastName NVARCHAR(50) NOT NULL
-      )
-  END";
+После создания базы данных создадим таблицу Authors:
 
-  SqlCommand cmd = new SqlCommand(createTableQuery, conn);
-  cmd.ExecuteNonQuery();
+```csharp
+string connectionString = $@"Data Source={ServerName};
+    Initial Catalog={DatabaseName};
+    Integrated Security=SSPI;
+    Pooling=false";
+
+using (var conn = new SqlConnection(connectionString))
+{
+    conn.Open();
+    string createTableQuery = @"
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Authors' AND xtype='U')
+        BEGIN
+            CREATE TABLE Authors (
+                Id INT IDENTITY(1,1) PRIMARY KEY,
+                FirstName NVARCHAR(50) NOT NULL,
+                LastName NVARCHAR(50) NOT NULL
+            )
+        END";
+
+    SqlCommand cmdTable = new SqlCommand(createTableQuery, conn);
+    cmdTable.ExecuteNonQuery();
+    Console.WriteLine("Таблица проверена/создана.");
+}
 ```
 
-# Вставка данных
+## Вставка данных
 
-```cs
-conn.Open();
-                // Используем параметризованный запрос для безопасности
-                string insertString = @"
-                    INSERT INTO Authors (FirstName, LastName)
-                    VALUES (@FirstName, @LastName)";
+Используем параметризованные запросы для безопасной вставки данных:
 
-                SqlCommand cmd = new SqlCommand(insertString, conn);
+```csharp
+string insertString = @"
+    INSERT INTO Authors (FirstName, LastName)
+    VALUES (@FirstName, @LastName)";
 
-                // Добавляем параметры
-                cmd.Parameters.AddWithValue("@FirstName", "Клиффорд");
-                cmd.Parameters.AddWithValue("@LastName", "Саймак");
+SqlCommand cmdInsert = new SqlCommand(insertString, conn);
 
-                cmd.ExecuteNonQuery();
-                Console.WriteLine("Данные успешно добавлены!");
+// Добавляем параметры
+cmdInsert.Parameters.AddWithValue("@FirstName", "Клиффорд");
+cmdInsert.Parameters.AddWithValue("@LastName", "Саймак");
 
-```              
+int rowsAffected = cmdInsert.ExecuteNonQuery();
+Console.WriteLine($"Данные успешно добавлены! Затронуто строк: {rowsAffected}");
+```
+
+## Чтение данных (SELECT)
+
+### Простой SELECT всех записей:
+
+```csharp
+Console.WriteLine("\n--- Чтение данных из таблицы Authors ---");
+string selectQuery = "SELECT Id, FirstName, LastName FROM Authors";
+
+using (SqlCommand cmdSelect = new SqlCommand(selectQuery, conn))
+using (SqlDataReader reader = cmdSelect.ExecuteReader())
+{
+    if (reader.HasRows)
+    {
+        Console.WriteLine("Id\tFirstName\tLastName");
+        Console.WriteLine("--\t---------\t--------");
+
+        while (reader.Read())
+        {
+            int id = reader.GetInt32(0);
+            string firstName = reader.GetString(1);
+            string lastName = reader.GetString(2);
+
+            Console.WriteLine($"{id}\t{firstName}\t\t{lastName}");
+        }
+    }
+    else
+    {
+        Console.WriteLine("В таблице нет данных.");
+    }
+}
+```
+
+### SELECT с условием WHERE:
+
+```csharp
+Console.WriteLine("\n--- Поиск автора по фамилии ---");
+string searchQuery = "SELECT Id, FirstName, LastName FROM Authors WHERE LastName LIKE @SearchName";
+
+using (SqlCommand cmdSearch = new SqlCommand(searchQuery, conn))
+{
+    cmdSearch.Parameters.AddWithValue("@SearchName", "%Саймак%");
+
+    using (SqlDataReader reader = cmdSearch.ExecuteReader())
+    {
+        if (reader.HasRows)
+        {
+            Console.WriteLine("Найденные авторы:");
+            while (reader.Read())
+            {
+                Console.WriteLine($"ID: {reader["Id"]}, Имя: {reader["FirstName"]}, Фамилия: {reader["LastName"]}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("Авторы не найдены.");
+        }
+    }
+}
+```
+
+## Полный код приложения
+
+```csharp
+using System;
+using Microsoft.Data.SqlClient;
+
+class Program
+{
+    static void Main()
+    {
+        // Инициализация клиента MS SQL
+        const string ServerName = "(localdb)\\MSSQLLocalDB";
+        const string DatabaseName = "Library3";
+
+        // Создаем БД
+        string masterConnectionString = $@"Data Source={ServerName};
+                 Initial Catalog=master;
+                 Integrated Security=SSPI;
+                 Pooling=false";
+
+        using (var masterConn = new SqlConnection(masterConnectionString))
+        {
+            masterConn.Open();
+            // Создаем базу с правильной кодировкой для кириллицы
+            var cmdCreateDb = new SqlCommand(
+                $"IF NOT EXISTS(SELECT * FROM sys.databases WHERE name = '{DatabaseName}') CREATE DATABASE [{DatabaseName}] COLLATE Cyrillic_General_CI_AS",
+                masterConn);
+            cmdCreateDb.ExecuteNonQuery();
+            Console.WriteLine("База данных создана с поддержкой кириллицы.");
+        }
+
+        // Создаем подключение к нашей БД
+        string connectionString = $@"Data Source={ServerName};
+            Initial Catalog={DatabaseName};
+            Integrated Security=SSPI;
+            Pooling=false";
+
+        using (var conn = new SqlConnection(connectionString))
+        {
+            // Создание таблицы
+            conn.Open();
+            string createTableQuery = @"
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Authors' AND xtype='U')
+                BEGIN
+                    CREATE TABLE Authors (
+                        Id INT IDENTITY(1,1) PRIMARY KEY,
+                        FirstName NVARCHAR(50) NOT NULL,
+                        LastName NVARCHAR(50) NOT NULL
+                    )
+                END";
+
+            SqlCommand cmdTable = new SqlCommand(createTableQuery, conn);
+            cmdTable.ExecuteNonQuery();
+            Console.WriteLine("Таблица проверена/создана.");
+
+            // Вставка данных
+            // Используем параметризованный запрос для безопасности
+            string insertString = @"
+                INSERT INTO Authors (FirstName, LastName)
+                VALUES (@FirstName, @LastName)";
+
+            SqlCommand cmdInsert = new SqlCommand(insertString, conn);
+
+            // Добавляем параметры
+            cmdInsert.Parameters.AddWithValue("@FirstName", "Клиффорд");
+            cmdInsert.Parameters.AddWithValue("@LastName", "Саймак");
+
+            int rowsAffected = cmdInsert.ExecuteNonQuery();
+            Console.WriteLine($"Данные успешно добавлены! Затронуто строк: {rowsAffected}");
+
+            // SELECT - чтение данных из таблицы
+            Console.WriteLine("\n--- Чтение данных из таблицы Authors ---");
+            string selectQuery = "SELECT Id, FirstName, LastName FROM Authors";
+
+            using (SqlCommand cmdSelect = new SqlCommand(selectQuery, conn))
+            using (SqlDataReader reader = cmdSelect.ExecuteReader())
+            {
+                if (reader.HasRows)
+                {
+                    Console.WriteLine("Id\tFirstName\tLastName");
+                    Console.WriteLine("--\t---------\t--------");
+
+                    while (reader.Read())
+                    {
+                        int id = reader.GetInt32(0);
+                        string firstName = reader.GetString(1);
+                        string lastName = reader.GetString(2);
+
+                        Console.WriteLine($"{id}\t{firstName}\t\t{lastName}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("В таблице нет данных.");
+                }
+            }
+
+            // Дополнительный пример: SELECT с WHERE
+            Console.WriteLine("\n--- Поиск автора по фамилии ---");
+            string searchQuery = "SELECT Id, FirstName, LastName FROM Authors WHERE LastName LIKE @SearchName";
+
+            using (SqlCommand cmdSearch = new SqlCommand(searchQuery, conn))
+            {
+                cmdSearch.Parameters.AddWithValue("@SearchName", "%Саймак%");
+
+                using (SqlDataReader reader = cmdSearch.ExecuteReader())
+                {
+                    if (reader.HasRows)
+                    {
+                        Console.WriteLine("Найденные авторы:");
+                        while (reader.Read())
+                        {
+                            Console.WriteLine($"ID: {reader["Id"]}, Имя: {reader["FirstName"]}, Фамилия: {reader["LastName"]}");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("Авторы не найдены.");
+                    }
+                }
+            }
+        }
+
+        Console.WriteLine("\nПрограмма завершена. Нажмите любую клавишу...");
+        Console.ReadKey();
+    }
+}
+```
+
+## Заключение
+
+В этой статье мы рассмотрели:
+- Установку необходимых пакетов NuGet
+- Создание базы данных с поддержкой кириллицы
+- Создание таблиц
+- Безопасную вставку данных с использованием параметризованных запросов
+- Чтение данных с помощью SqlDataReader
+- Использование блоков using для правильного управления ресурсами
+
+Этот код обеспечивает надежное взаимодействие с базой данных и может служить основой для более сложных приложений.
