@@ -1,0 +1,21 @@
+ ipPools:
+    - blockSize: 26
+      cidr: 10.244.0.0/16
+      disableBGPExport: false
+      encapsulation: VXLAN
+      natOutgoing: Enabled
+      nodeSelector: all()
+    - blockSize: 122
+      cidr: fd00:102::/64
+      disableBGPExport: false
+      encapsulation: VXLAN
+      natOutgoing: Enabled
+      nodeSelector: all()
+    linuxDataplane: Iptables
+    multiInterfaceMode: None
+    nodeAddressAutodetectionV4:
+      skipInterface: tun0
+    nodeAddressAutodetectionV6:
+      firstFound: true
+  cni:
+    ipam:
