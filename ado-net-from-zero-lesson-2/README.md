@@ -121,10 +121,10 @@ class Program
         // Выберите подходящий вариант:
 
         // 1. LocalDB
-        return @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=master;Integrated Security=true;TrustServerCertificate=true;";
+        //return @"Data Source=(localdb)\MSSQLLocalDB;Initial Catalog=master;Integrated //////Security=true;TrustServerCertificate=true;";
 
         // 2. SQL Server Express
-        // return @"Data Source=.\SQLEXPRESS;Initial Catalog=master;Integrated Security=true;";
+        return @"Data Source=.\SQLEXPRESS;Initial Catalog=master;Integrated Security=true;TrustServerCertificate=true";
 
         // 3. Полный SQL Server с аутентификацией Windows
         // return @"Data Source=МойСервер;Initial Catalog=master;Integrated Security=true;";
