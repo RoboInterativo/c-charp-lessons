@@ -1,3 +1,271 @@
+Для создания 3D-фигуры и анимации вращения в WPF (C#) используется пространство имен **`System.Windows.Media.Media3D`**.
+
+WPF использует **DirectX** для рендеринга 3D, но оборачивает это в XAML и C#. Вот два основных подхода: **XAML + Code-behind** (самый простой) и **чистый C#** (динамическое создание).
+
+Ниже я покажу полный рабочий пример с анимацией вращения.
+
+---
+
+### Способ 1: Чистый C# код (Динамическое создание)
+
+Этот метод хорош, если вы генерируете геометрию программно.
+
+Создайте окно WPF и вставьте следующий код в `MainWindow.xaml.cs`:
+
+```csharp
+using System;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Media3D;
+
+namespace Wpf3DExample
+{
+    public partial class MainWindow : Window
+    {
+        public MainWindow()
+        {
+            InitializeComponent();
+            Create3DScene();
+        }
+
+        private void Create3DScene()
+        {
+            // 1. Создаем Viewport (холст для 3D)
+            var viewport = new Viewport3D();
+
+            // 2. Создаем Камеру (перспективная)
+            var camera = new PerspectiveCamera();
+            camera.Position = new Point3D(0, 0, 5); // Позиция
+            camera.LookDirection = new Vector3D(0, 0, -5); // Куда смотрим
+            camera.UpDirection = new Vector3D(0, 1, 0);
+            viewport.Camera = camera;
+
+            // 3. Создаем источник света (обязательно, иначе фигура черная)
+            var ambientLight = new AmbientLight(Colors.White);
+
+            // 4. СОЗДАЕМ КУБ (3D фигуру)
+            MeshGeometry3D mesh = new MeshGeometry3D();
+
+            // Простой куб (8 вершин, 12 треугольников)
+            // Координаты вершин
+            Point3DCollection positions = new Point3DCollection();
+            positions.Add(new Point3D(-1, -1, -1));
+            positions.Add(new Point3D(1, -1, -1));
+            positions.Add(new Point3D(1, 1, -1));
+            positions.Add(new Point3D(-1, 1, -1));
+            positions.Add(new Point3D(-1, -1, 1));
+            positions.Add(new Point3D(1, -1, 1));
+            positions.Add(new Point3D(1, 1, 1));
+            positions.Add(new Point3D(-1, 1, 1));
+            mesh.Positions = positions;
+
+            // Индексы треугольников (каждые 3 точки = 1 треугольник)
+            Int32Collection indices = new Int32Collection();
+            // Задняя грань
+            indices.Add(0); indices.Add(2); indices.Add(1);
+            indices.Add(0); indices.Add(3); indices.Add(2);
+            // Передняя грань
+            indices.Add(4); indices.Add(5); indices.Add(6);
+            indices.Add(4); indices.Add(6); indices.Add(7);
+            // Левая грань
+            indices.Add(0); indices.Add(7); indices.Add(3);
+            indices.Add(0); indices.Add(4); indices.Add(7);
+            // Правая грань
+            indices.Add(1); indices.Add(2); indices.Add(6);
+            indices.Add(1); indices.Add(6); indices.Add(5);
+            // Верхняя грань
+            indices.Add(3); indices.Add(7); indices.Add(6);
+            indices.Add(3); indices.Add(6); indices.Add(2);
+            // Нижняя грань
+            indices.Add(0); indices.Add(1); indices.Add(5);
+            indices.Add(0); indices.Add(5); indices.Add(4);
+            mesh.TriangleIndices = indices;
+
+            // Нормали (чтобы свет падал правильно)
+            mesh.Normals = new Vector3DCollection();
+            foreach (var pos in positions)
+                mesh.Normals.Add((Vector3D)pos); // Упрощенно для куба со смещением
+
+            // 5. Создаем Материал (цвет)
+            DiffuseMaterial material = new DiffuseMaterial(new SolidColorBrush(Colors.Orange));
+
+            // 6. Собираем Модель
+            GeometryModel3D model = new GeometryModel3D(mesh, material);
+
+            // 7. Помещаем модель в группу (чтобы вращать всю группу целиком)
+            Model3DGroup group = new Model3DGroup();
+            group.Children.Add(ambientLight);
+            group.Children.Add(model);
+
+            // 8. Добавляем в Viewport
+            viewport.Children.Add(new ModelVisual3D() { Content = group });
+
+            // 9. Добавляем Viewport в окно
+            this.Content = viewport;
+
+            // 10. АНИМАЦИЯ ВРАЩЕНИЯ
+            RotateTransform3D rotationTransform = new RotateTransform3D();
+            group.Transform = rotationTransform;
+
+            // Ось вращения (Y - вертикальная, X - горизонтальная)
+            AxisAngleRotation3D axisRotation = new AxisAngleRotation3D(new Vector3D(1, 1, 0), 0);
+            rotationTransform.Rotation = axisRotation;
+
+            // Создаем анимацию (от 0 до 360 градусов за 10 секунд)
+            DoubleAnimation rotationAnimation = new DoubleAnimation();
+            rotationAnimation.From = 0;
+            rotationAnimation.To = 360;
+            rotationAnimation.Duration = new Duration(TimeSpan.FromSeconds(10));
+            // Бесконечное повторение
+            rotationAnimation.RepeatBehavior = RepeatBehavior.Forever;
+
+            // Запускаем анимацию
+            axisRotation.BeginAnimation(AxisAngleRotation3D.AngleProperty, rotationAnimation);
+        }
+    }
+}
+```
+
+---
+
+### Способ 2: XAML + Code-behind (Рекомендуется)
+
+Разделение интерфейса и логики. Это стандарт WPF.
+
+**MainWindow.xaml:**
+```xml
+<Window x:Class="WpfApp3D.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="3D Вращение" Height="450" Width="450">
+
+    <Grid>
+        <Viewport3D Name="MyViewport">
+
+            <!-- Камера -->
+            <Viewport3D.Camera>
+                <PerspectiveCamera Position="0,0,5" LookDirection="0,0,-5" UpDirection="0,1,0"/>
+            </Viewport3D.Camera>
+
+            <!-- Модели -->
+            <ModelVisual3D>
+                <ModelVisual3D.Content>
+                    <Model3DGroup>
+
+                        <!-- Свет -->
+                        <AmbientLight Color="White"/>
+                        <DirectionalLight Color="LightGray" Direction="-1,-1,-1"/>
+
+                        <!-- Сама фигура (Куб с закруглениями или просто куб) -->
+                        <GeometryModel3D>
+                            <GeometryModel3D.Geometry>
+                                <MeshGeometry3D Positions="-1,-1,-1  1,-1,-1  1,1,-1  -1,1,-1  -1,-1,1  1,-1,1  1,1,1  -1,1,1"
+                                                TriangleIndices="0,2,1  0,3,2  4,5,6  4,6,7  0,7,3  0,4,7  1,2,6  1,6,5  3,7,6  3,6,2  0,1,5  0,5,4"/>
+                            </GeometryModel3D.Geometry>
+
+                            <GeometryModel3D.Material>
+                                <DiffuseMaterial Brush="Orange"/>
+                            </GeometryModel3D.Material>
+
+                            <!-- Трансформация для вращения -->
+                            <GeometryModel3D.Transform>
+                                <RotateTransform3D>
+                                    <RotateTransform3D.Rotation>
+                                        <AxisAngleRotation3D x:Name="RotationAxis" Axis="1,1,0" Angle="0"/>
+                                    </RotateTransform3D.Rotation>
+                                </RotateTransform3D>
+                            </GeometryModel3D.Transform>
+
+                        </GeometryModel3D>
+                    </Model3DGroup>
+                </ModelVisual3D.Content>
+            </ModelVisual3D>
+        </Viewport3D>
+    </Grid>
+</Window>
+```
+
+**MainWindow.xaml.cs (Запуск анимации):**
+```csharp
+using System;
+using System.Windows;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Media3D;
+
+namespace WpfApp3D
+{
+    public partial class MainWindow : Window
+    {
+        public MainWindow()
+        {
+            InitializeComponent();
+            StartRotation();
+        }
+
+        private void StartRotation()
+        {
+            // Находим наш объект по имени (x:Name="RotationAxis")
+            AxisAngleRotation3D rotation = this.RotationAxis;
+
+            // Создаем анимацию
+            DoubleAnimation animation = new DoubleAnimation();
+            animation.From = 0;
+            animation.To = 360;
+            animation.Duration = new Duration(TimeSpan.FromSeconds(8));
+            animation.RepeatBehavior = RepeatBehavior.Forever;
+
+            // Запускаем
+            rotation.BeginAnimation(AxisAngleRotation3D.AngleProperty, animation);
+        }
+    }
+}
+```
+
+---
+
+### Важные моменты для понимания:
+
+1.  **Camera** — определяет, откуда вы смотрите (`Position`) и куда (`LookDirection`).
+2.  **MeshGeometry3D** — это сетка из треугольников. Любая сложная фигура (сфера, цилиндр) строится из множества треугольников.
+3.  **Material** — отвечает за цвет и текстуру. `DiffuseMaterial` — матовый, `SpecularMaterial` — глянцевый.
+4.  **Transform** — трансформация. Для вращения нужен `RotateTransform3D` и `AxisAngleRotation3D` (задает ось).
+
+---
+
+### Как нарисовать более сложные фигуры (Сфера, Цилиндр)?
+
+В WPF **нет** встроенных классов `SphereMesh` или `CylinderMesh`. Их нужно генерировать вручную через циклы (сферические координаты).
+
+**Пример генерации сферы (C#):**
+```csharp
+private static MeshGeometry3D CreateSphere(double radius, int slices, int stacks)
+{
+    var mesh = new MeshGeometry3D();
+    for (int i = 0; i <= stacks; i++)
+    {
+        double theta = Math.PI * i / stacks;
+        for (int j = 0; j <= slices; j++)
+        {
+            double phi = 2 * Math.PI * j / slices;
+            double x = radius * Math.Sin(theta) * Math.Cos(phi);
+            double y = radius * Math.Cos(theta);
+            double z = radius * Math.Sin(theta) * Math.Sin(phi);
+            mesh.Positions.Add(new Point3D(x, y, z));
+        }
+    }
+    // ... Добавление индексов для треугольников
+    return mesh;
+}
+```
+
+Если вам не хочется писать геометрию вручную, используйте библиотеку **Helix Toolkit** (NuGet), она содержит готовые примитивы (`Sphere`, `Box`, `Cylinder`).
+
+```
+ок а теперь словами опиши как работает с кубом
+у меня есть 8 точек координаты и что с ними делаем
+```
+
 Отлично! Давайте разберем **по шагам** на пальцах, что происходит с этими 8 точками, когда мы рисуем 3D-куб в WPF.
 
 ---
